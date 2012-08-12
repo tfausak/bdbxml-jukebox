@@ -1,0 +1,304 @@
+/*
+ * Table of contents
+ * 1. Style reset
+ * 2. Main layout
+ * 3. Header
+ * 4. Nav
+ * 5. Content
+ * 5a. Search
+ * 5b. Songs
+ * 6. Footer
+ */
+
+/* 1. Style reset */
+
+* {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font: inherit;
+    height: auto;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    text-decoration: inherit;
+    width: auto;
+}
+
+/* 2. Main layout */
+
+html {
+    background: #eee;
+    color: #222;
+    font: 1em/1.5em 'Helvetica Neue',Helvetica,Arial,sans-serif;
+}
+
+body {
+    min-width: 20em;
+    margin: 0 auto;
+    max-width: 30em;
+}
+
+/* 3. Header */
+
+#header {
+    background: #aaa url('../images/header-gradient.png') repeat-x scroll center center;
+    position: relative;
+}
+
+    #header h1 {
+        font-size: 1.5em;
+        font-weight: bold;
+        line-height: 2em;
+        margin: 0 3.5em;
+        overflow: hidden;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    #header ul {
+        font-size: 0.75em;
+        font-weight: bold;
+        left: 0;
+        line-height: 2em;
+        position: absolute;
+        right: 0;
+        top: 1em;
+    }
+
+        #header ul li {
+        }
+
+            #header ul li a {
+                background: #ddd url('../images/button-gradient.png') repeat-x scroll center center;
+                border: 1px solid #555;
+                color: #555;
+                display: block;
+                margin: -1px;
+                max-width: 5em;
+                overflow: hidden;
+                padding: 0 0.5em;
+                position: absolute;
+                text-align: center;
+                top: 0;
+                white-space: nowrap;
+            }
+
+                #header ul li a:focus,
+                #header ul li a:hover {
+                    color: #000;
+                }
+
+            #header ul li a.back {
+                left: 0.5em;
+            }
+
+            #header ul li a.forward {
+                right: 0.5em;
+            }
+
+/* 4. Nav */
+
+#nav {
+    background: #ddd url('../images/nav-gradient.png') repeat-x scroll center center;
+    border-bottom: 0.5em solid #eee;
+    height: 2.5em;
+}
+
+    #nav li {
+        float: left;
+        width: 33.3333%;
+    }
+
+        #nav li a {
+            color: #556;
+            display: block;
+            font-weight: bold;
+            line-height: 1em;
+            margin: 0.5em 0.5em 0 0.5em;
+            padding: 0.5em;
+            text-align: center;
+        }
+
+            #nav li a:focus,
+            #nav li a:hover {
+                color: #000;
+            }
+
+        #nav li a#current {
+            background: #eee;
+        }
+
+/* 5. Content */
+
+#content {
+    background: #fff;
+}
+
+    #content a {
+        color: #38d;
+    }
+
+    #content h2 {
+        font-size: 2em;
+        line-height: 1.5em;
+        padding: 0 0.75em;
+    }
+
+    #content p {
+        padding: 0.75em 1.5em;
+    }
+
+    #content strong {
+        font-weight: bold;
+    }
+
+    /* 5a. Search */
+
+    #search {
+        background: #eee;
+        padding: 0.75em;
+    }
+
+        #search fieldset {
+            background: #fff;
+            border: 1px solid #aaa;
+            height: 1.5em;
+            margin: -1px;
+            position: relative;
+        }
+
+            #search fieldset legend {
+                display: none;
+            }
+
+            #search fieldset input {
+                bottom: 0;
+                display: block;
+                height: 1.5em;
+                line-height: 1.5em;
+                position: absolute;
+                right: 0;
+                top: 0;
+            }
+
+            #search fieldset input#query {
+                cursor: text;
+                left: 0;
+                padding: 0 2em 0 0.5em;
+            }
+
+            #search fieldset input#reset {
+                color: #f00;
+                cursor: pointer;
+                font-weight: bold;
+                text-align: center;
+                width: 2em;
+            }
+
+            #search fieldset input#submit {
+                display: none;
+            }
+
+    /* 5b. Songs */
+
+    #songs {
+        border-top: 1px solid #555;
+        margin-top: -1px;
+        white-space: nowrap;
+    }
+
+        #songs li {
+            position: relative;
+        }
+
+            #songs li a.direct {
+                background: #fff;
+                border-bottom: 1px solid #ddd;
+                display: block;
+                padding: 0 3.5em 0 0.5em;
+            }
+
+                #songs li a.direct:focus,
+                #songs li a.direct:hover {
+                    background: #38d;
+                }
+
+                #songs li a.direct strong {
+                    color: #222;
+                    display: block;
+                    font-weight: bold;
+                    line-height: 1.25em;
+                    overflow: hidden;
+                    padding: 0.25em 0 0 0;
+                }
+
+                    #songs li a.direct:focus strong,
+                    #songs li a.direct:hover strong {
+                        color: #fff;
+                    }
+
+                #songs li a.direct span {
+                    color: #aaa;
+                    display: block;
+                    font-size: 0.875em;
+                    margin: -1px 0 0 0;
+                    overflow: hidden;
+                }
+
+                    #songs li a.direct:focus span,
+                    #songs li a.direct:hover span {
+                        color: #fff;
+                    }
+
+            #songs li a.utility {
+                color: #aaa;
+                display: block;
+                line-height: 3em;
+                position: absolute;
+                right: 0;
+                text-align: center;
+                top: 0;
+                width: 3em;
+            }
+
+                #songs li a.utility:focus,
+                #songs li a.utility:hover {
+                    color: #000;
+                }
+
+                #songs li a.direct:focus + a.utility,
+                #songs li a.direct:hover + a.utility {
+                    color: #fff;
+                }
+
+/* 6. Footer */
+
+#footer {
+    border-top: 1px solid #555;
+    color: #556;
+    margin-top: -1px;
+    padding: 0.75em;
+    position: relative;
+    text-align: center;
+    z-index: 2;
+}
+
+    #footer a {
+        font-weight: bold;
+    }
+
+        #footer a:focus,
+        #footer a:hover {
+            color: #000;
+        }
+
+    #footer p {
+    }
+
+    #footer ul {
+    }
+
+        #footer ul li {
+            display: inline;
+        }

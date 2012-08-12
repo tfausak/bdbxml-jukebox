@@ -1,0 +1,38 @@
+* {
+    -webkit-border-radius: 0;
+    -webkit-text-size-adjust: none;
+}
+
+body#portrait {
+    min-height: 416px;
+}
+
+body#landscape {
+    min-height: 268px;
+}
+
+#header h1,
+#header ul li a,
+#songs li a strong,
+#songs li a span {
+    text-overflow: ellipsis;
+}
+
+#header ul li a {
+    -webkit-border-radius: 0.5em;
+}
+
+#nav li a {
+    -webkit-border-top-left-radius: 0.5em;
+    -webkit-border-top-right-radius: 0.5em;
+}
+
+#search fieldset,
+#search fieldset input#query {
+    -webkit-border-radius: 0.75em;
+}
+
+#search fieldset input#reset {
+    line-height: 0.5em;
+    right: 0.125em;
+}
