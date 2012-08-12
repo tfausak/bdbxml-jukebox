@@ -1,0 +1,241 @@
+/* 1.   Style reset */
+
+* {
+    margin: 0;
+    padding: 0;
+}
+
+/* 2.   Main layout */
+
+html {
+    background: #2e3436;
+}
+
+body {
+    background: #eeeeec;
+    color: #2e3436;
+    font: 1em/1.5em sans-serif;
+    margin: 0 auto;
+    max-width: 30em;
+    min-width: 20em;
+    position: relative;
+}
+
+    body#portrait { min-height: 416px; }
+    body#landscape { min-height: 268px; }
+
+#header {
+    background: #729fcf;
+    padding: 0.75em;
+}
+
+#content {
+}
+
+#footer {
+    color: #babdb6;
+    padding: 0.75em;
+}
+
+/* 3.   General styles */
+
+.hidden {
+    display: none;
+}
+
+.invisible {
+    visibility: hidden;
+}
+
+a {
+    cursor: pointer;
+    text-decoration: none;
+}
+
+abbr {
+    cursor: help;
+    border-bottom: 1px dotted;
+    font-variant: normal;
+}
+
+em {
+    font-style: italic;
+}
+
+strong {
+    font-weight: bold;
+}
+
+/* 3.   Header */
+
+h1 {
+    cursor: default;
+    font-size: 1.5em;
+    font-weight: bold;
+    line-height: 1em;
+    text-align: center;
+}
+
+/* 4.   Content */
+
+/* 4a.  Back- and forward navigation */
+
+p#nav-backward,
+p#nav-forward {
+    line-height: 3em;
+    position: absolute;
+    top: 0;
+}
+
+    p#nav-backward a,
+    p#nav-forward a {
+        color: #d3d7cf;
+        display: block;
+        padding: 0 0.75em;
+    }
+
+        p#nav-backward a:hover,
+        p#nav-forward a:hover {
+            color: #eeeeec;
+        }
+
+p#nav-backward { left: 0; }
+p#nav-forward { right: 0; }
+
+/* 4b.  Query form */
+
+form#query {
+    padding: 0 0.75em 0.75em 0.75em;
+}
+
+    form#query fieldset {
+        border: 0;
+    }
+
+    form#query legend {
+        display: none;
+    }
+
+    form#query li {
+        background: #d3d7cf;
+        list-style: none;
+        margin-top: 1.5em;
+        padding: 0.75em;
+        position: relative;
+    }
+
+    form#query li.no-label {
+        margin-top: 0.75em;
+    }
+
+    form#query label {
+        background: #d3d7cf;
+        display: block;
+        left: 0.75em;
+        padding: 0 0.5em;
+        position: absolute;
+        top: -0.75em;
+    }
+
+    form#query select,
+    form#query input {
+        display: block;
+        font: 1em/1.5em sans-serif;
+        width: 100%;
+    }
+
+/* 4c.  Song list */
+
+ul#songs {
+    border-bottom: 1px solid #d3d7cf;
+}
+
+li.song {
+    background: #fff;
+    border-top: 1px solid #d3d7cf;
+    overflow: hidden;
+    padding: 0 0.75em;
+    position: relative;
+    white-space: nowrap;
+}
+
+a.title,
+a.artist,
+a.album {
+    color: #2e3436;
+}
+
+    a.title:hover,
+    a.artist:hover,
+    a.album:hover {
+        color: #729fcf;
+    }
+
+a.title {
+    font-weight: bold;
+}
+
+    a.title:after {
+        content: '\a'; /* new line */
+        white-space: pre;
+    }
+
+a.artist {
+}
+
+    a.artist:after {
+        color: #babdb6;
+        content: '\b7'; /* middot */
+        margin: 0 0.25em;
+    }
+
+a.album {
+}
+
+ul.utility {
+    background: inherit;
+    line-height: 3em;
+    list-style: none;
+    padding: 0 0.5em;
+    position: absolute;
+    right: 0;
+    top: 0;
+}
+
+    ul.utility a {
+        color: #babdb6;
+        display: block;
+        padding: 0 0.25em;
+    }
+
+        ul.utility a:hover {
+            color: #729fcf;
+        }
+
+    ul.utility li {
+        float: left;
+    }
+
+/* 4.   Footer */
+
+#footer a {
+    color: #babdb6;
+    font-weight: bold;
+}
+
+    #footer a:hover {
+        color: #729fcf;
+    }
+
+#footer li {
+    display: inline;
+    list-style: none;
+}
+
+#footer p {
+    text-align: right;
+}
+
+#footer ul {
+    text-align: right;
+}

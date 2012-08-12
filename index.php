@@ -1,28 +1,20 @@
 <?php
 
-# ------------------------------------------------------------------------------
-# Define constants
-# ------------------------------------------------------------------------------
-
-define('ENV_HOME', 'db/');
-define('DATABASE', 'library.dbxml');
+require_once('config.php');
 
 # ------------------------------------------------------------------------------
 # Set up database environment
 # ------------------------------------------------------------------------------
 
-# Initialize environment
 $env = new Db4Env();
 $env->open(ENV_HOME, DB_INIT_LOCK |
                      DB_INIT_LOG |
                      DB_INIT_MPOOL |
                      DB_INIT_TXN);
 
-# Create XML manager and container
 $mgr = new XmlManager($env, 0);
 $con = $mgr->openContainer(DATABASE);
 
-# Create query context
 $qc = $mgr->createQueryContext(XmlQueryContext_LiveValues,
                                XmlQueryContext_Eager);
 $qc->setDefaultCollection(DATABASE);
@@ -32,149 +24,267 @@ $qc->setDefaultCollection(DATABASE);
 # ------------------------------------------------------------------------------
 
 $g = array('artist', 'album', 'search');
-foreach ($g as $k => $i) {
+
+# [0]: true if variable is set and not empty
+# [1]: value of variable or an empty string if not [0]
+# [2]: [1] with HTML entities escaped
+foreach ($g as $k => $v) {
     unset($g[$k]);
 
-    $g[$i][] = isset($_GET[$i]) && $_GET[$i] !== '';
-
-    if ($g[$i][0]) {
-        $g[$i][] = $_GET[$i];
-        $g[$i][] = htmlspecialchars($_GET[$i]);
-    }
-    else {
-        $g[$i][1] = $g[$i][2] = '';
-    }
+    $_GET[$v] = isset($_GET[$v]) ? trim($_GET[$v]) : '';
+    
+    $g[$v][0] = isset($_GET[$v]) && !empty($_GET[$v]);
+    $g[$v][1] = ($g[$v][0]) ? $_GET[$v] : '';
+    $g[$v][2] = htmlspecialchars($g[$v][1]);
 }
 
 # ------------------------------------------------------------------------------
-# Get every artist in the database
+# Create a list of artists
 # ------------------------------------------------------------------------------
-
-$xquery = 'for $i in collection()/artists return $i';
+/*
+$artists = array();
+$xquery = 'for $i in distinct-values(collection()/artists/artist) '
+        . 'order by $i '
+        . 'return data($i)';
 $result = $mgr->query($xquery, $qc);
-$artists = $result->next()->asString();
 
+while ($result->hasNext()) {
+    $artists[] = $result->next()->asString();
+}
+
+natcasesort($artists);
+*/
 # ------------------------------------------------------------------------------
-# Get every album in the database, or just albums by the selected artist
+# Create a list of albums
 # ------------------------------------------------------------------------------
+/*
+$albums = array();
+$xquery = 'for $i in distinct-values(collection()/albums/album) '
+        . 'order by $i '
+        . 'return data($i)';
 
 if ($g['artist'][0]) {
-    $albums = array();
-    $xquery = 'for $i in collection()/song
-               where $i/artist eq $artist
-               return $i/album';
+    $xquery = 'for $i in collection()/albums/album '
+            . 'where $i/@artist eq $artist '
+            . 'order by $i/album '
+            . 'return data($i)';
     $qc->setVariableValue('artist', $g['artist'][1]);
-    $result = $mgr->query($xquery, $qc);
+}
 
-    while ($result->hasNext()) {
-        $albums[] = $result->next()->asString() . "\n";
-    }
+$result = $mgr->query($xquery, $qc);
 
-    $albums = array_unique($albums);
-    $albums = '<albums>' . implode('', $albums) . '</albums>';
+while ($result->hasNext()) {
+    $albums[] = $result->next()->asString();
+}
+
+natcasesort($albums);
+*/
+# ------------------------------------------------------------------------------
+# Build query
+# ------------------------------------------------------------------------------
+
+if ($g['artist'][0] || $g['album'][0] || $g['search'][0]) {
+    $xquery = 'for $i in collection()/song ';
 }
 else {
-    $xquery = 'for $i in collection()/albums return $i';
-    $result = $mgr->query($xquery, $qc);
-    $albums = $result->next()->asString();
+    $total = $con->getNumDocuments();
+    $limit = min($total, RAND_LIMIT);
+    $rand = range(1, $total);
+    shuffle($rand);
+    $rand = array_slice($rand, 0, $limit);
+    $rand = '(' . implode(', ', $rand) . ')';
+
+    $xquery = 'for $i at $j in collection()/song where $j = ' . $rand . ' ';
 }
-
-# ------------------------------------------------------------------------------
-# Build and execute XQuery
-# ------------------------------------------------------------------------------
-
-$xquery = 'for $i in collection()/song';
 
 if ($g['artist'][0]) {
-    $xquery .= ' where $i/artist eq $artist';
+    $xquery .= 'where $i/artist eq $artist ';
     $qc->setVariableValue('artist', $g['artist'][1]);
 }
-
 if ($g['album'][0]) {
-    $xquery .= ($g['artist'][0]) ? ' and' : ' where';
-    $xquery .= ' $i/album eq $album';
+    $xquery .= ($g['artist'][0]) ? 'and ' : 'where ';
+    $xquery .= '$i/album eq $album ';
     $qc->setVariableValue('album', $g['album'][1]);
 }
-
 if ($g['search'][0]) {
-    $xquery .= ($g['artist'][0] || $g['album'][0]) ? ' and' : ' where';
-    $xquery .= ' (dbxml:contains($i/title, $search) or
-                  dbxml:contains($i/album, $search) or
-              dbxml:contains($i/artist, $search) or
-              dbxml:contains($i/album_artist, $search))';
+    $xquery .= ($g['artist'][0] || $g['album'][0]) ? 'and ' : 'where ';
+    $xquery .= '(dbxml:contains($i/title, $search) or '
+             . 'dbxml:contains($i/artist, $search) or '
+             . 'dbxml:contains($i/album, $search)) ';
     $qc->setVariableValue('search', $g['search'][1]);
 }
 
-$xquery .= ' return $i';
+$xquery .= 'return
+<li class="song">
+    <a class="title"
+       href="{data($i/url)}"
+       title="Listen to this song">
+        {data($i/title)}
+    </a>
 
+    <span class="hidden"> by </span>
+
+    <a class="artist"
+       href="index.php?artist={data($i/artist)}"
+       title="Find more songs by this artist">
+        {data($i/artist)}
+    </a>
+
+    <span class="hidden"> from </span>
+
+    <a class="album"
+       href="index.php?album={data($i/album)}"
+       title="Find more songs from this album">
+        {data($i/album)}
+    </a>
+
+    <ul class="utility">
+        <li>
+            <a class="add"
+               href="playlist.php?add={data($i/url)}"
+               title="Add this song to your playlist">
+                {string("+")}
+            </a>
+        </li>
+    </ul>
+</li>';
+
+# ------------------------------------------------------------------------------
+# Execute query
+# ------------------------------------------------------------------------------
+
+$songs = array();
 $result = $mgr->query($xquery, $qc);
+
 while ($result->hasNext()) {
     $songs[] = $result->next()->asString();
 }
 
-# ------------------------------------------------------------------------------
-# Choose (up to) 10 random songs if no selection or search was done
-# ------------------------------------------------------------------------------
-
 if (!$g['artist'][0] && !$g['album'][0] && !$g['search'][0]) {
-    $total = $con->getNumDocuments();
-    $limit = min($total, 10);
-    $rand = range(1, $total);
-    shuffle($rand);
-    $rand = array_slice($rand, 0, $limit);
-    $tmp = array();
+    shuffle($songs);
+}
 
-    foreach ($rand as $i) {
-        $tmp[] = $songs[$i];
+# ------------------------------------------------------------------------------
+# Format artist list
+# ------------------------------------------------------------------------------
+/*
+foreach ($artists as &$artist) {
+    $artist = htmlspecialchars($artist);
+    $tmp = '<option';
+    
+    if ($artist === $g['artist'][2]) {
+        $tmp .= ' selected="selected"';
     }
-
-    $songs = $tmp;
+    
+    $artist = $tmp . '>' . $artist . '</option>';
 }
 
-# ------------------------------------------------------------------------------
-# Format XML
-# ------------------------------------------------------------------------------
-
-$songs = '<songs>' . implode("\n", $songs) . '</songs>';
-
-$xml = <<<XML
-<?xml version="1.0" encoding="utf-8"?>
-
-<library>
-    <get_artist>{$g['artist'][2]}</get_artist>
-    <get_album>{$g['album'][2]}</get_album>
-    <get_search>{$g['search'][2]}</get_search>
-    <xquery>{$xquery}</xquery>
-
+$count = count($artists);
+$artists = implode('', $artists);
+$artists = <<<HTML
+<select id="artist" name="artist">
+    <option value="">All artists ({$count})</option>
     {$artists}
-    {$albums}
-    {$songs}
-</library>
-XML;
-
+</select>
+HTML;
+*/
 # ------------------------------------------------------------------------------
-# Transform and output XML
+# Format album list
 # ------------------------------------------------------------------------------
-
-$cmd = 'xsltproc transform.xsl -';
-$descriptorspec = array(
-    '0' => array('pipe', 'r'),
-    '1' => array('pipe', 'w')
-);
-$pipes = array();
-
-$process = proc_open($cmd, $descriptorspec, $pipes);
-
-if (!is_resource($process)) {
-    exit(1);
+/*
+foreach ($albums as &$album) {
+    $album = htmlspecialchars($album);
+    $tmp = '<option';
+    
+    if ($album === $g['album'][2]) {
+        $tmp .= ' selected="selected"';
+    }
+    
+    $album = $tmp . '>' . $album . '</option>';
 }
 
-fwrite($pipes[0], $xml);
-fclose($pipes[0]);
+$count = count($albums);
+$albums = implode('', $albums);
+$albums = <<<HTML
+<select id="album" name="album">
+    <option value="">All albums ({$count})</option>
+    {$albums}
+</select>
+HTML;
+*/
+# ------------------------------------------------------------------------------
+# Format some stray variables
+# ------------------------------------------------------------------------------
 
-echo stream_get_contents($pipes[1]);
-fclose($pipes[1]);
+$songs = implode("\n\t", $songs);
 
-proc_close($process);
+$start_over = '';
+if ($g['artist'][0] || $g['album'][0] || $g['search'][0]) {
+    $start_over = <<<HTML
+<p id="nav-backward">
+    <a href="./"
+       title="Return to the home page">
+        Start over
+    </a>
+</p>
+HTML;
+}
+
+$playlist = <<<HTML
+<p id="nav-forward">
+    <a href="playlist.php"
+       title="Go to your playlist">
+        Playlist
+    </a>
+</p>
+HTML;
+
+# ------------------------------------------------------------------------------
+# Output XHTML
+# ------------------------------------------------------------------------------
+
+$content = <<<HTML
+{$start_over}
+{$playlist}
+
+<form action="index.php" id="query" method="get">
+    <fieldset>
+        <legend>Find something to listen to</legend>
+
+        <ul>
+            <!--
+            <li>
+                <label for="artist">Artist</label>
+
+{$artists}
+            </li>
+        
+            <li>
+                <label for="album">Album</label>
+
+{$albums}
+            </li>
+            -->
+        
+            <li>
+                <label for="search">Search</label>
+
+                <input id="search" name="search" type="text" value="{$g[$v][2]}"/>
+            </li>
+        
+            <li class="no-label">
+                <input type="submit" value="Go"/>
+            </li>
+        </ul>
+    </fieldset>
+</form>
+
+<ul id="songs">
+    {$songs}
+</ul>
+HTML;
+
+$page = new Page();
+$page->output($content);
 
 ?>
