@@ -1,15 +1,28 @@
 #!/usr/local/bin/php
 <?php
 
+# ------------------------------------------------------------------------------
+# Set up program environment
+# ------------------------------------------------------------------------------
+
+# For debugging
+ini_set('error_reporting', E_ALL | E_STRICT);
+
+# Allow owner and group full permissions on files generate by this script
+umask(002);
+
+# Avoid PHP notices about timezones (actual timezone here is not important)
+date_default_timezone_set('UTC');
+
+# Load GetID3 library for parsing ID3v1 and ID3v2 tags
 require_once('getid3/getid3.php');
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# ------------------------------------------------------------------------------
 # Parse command-line options
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# ------------------------------------------------------------------------------
 
 # Default values for command-line options
-$defaults = array
-(
+$defaults = array(
     'd' => 'library/',
     'e' => 'db/',
     'f' => 'library.dbxml',
@@ -33,15 +46,15 @@ $options = getopt($options);
 if ($options === false || isset($options['h'])) {
     echo <<<HELP
 -d  Directory to scan for music files
-        default: {$defaults['d']}
+    default: {$defaults['d']}
 -e  Base directory for database environment
-        default: {$defaults['e']}
+    default: {$defaults['e']}
 -f  Database file to update or create
-        default: {$defaults['f']}
+    default: {$defaults['f']}
 -i  File extensions to include (ex: mp3,M4A,.WMa)
-        default: all
+    default: all
 -x  File extensions to exclude (ex: flac,M4P,.AaC)
-        default: none
+    default: none
 -v  Verbose mode
 -h  Show this help message
 
@@ -50,42 +63,59 @@ HELP;
     exit(0);
 }
 
-$d = (isset($options['d'])) ? $options['d'] : $defaults['d'];
-    if (substr($d, -1) !== '/') $d .= '/'; # Force a trailing slash
-$e = (isset($options['e'])) ? $options['e'] : $defaults['e'];
-    if (substr($e, -1) !== '/') $e .= '/';
-$f = (isset($options['f'])) ? $options['f'] : $defaults['f'];
-$i = (isset($options['i'])) ? format_exts($options['i']) : $defaults['i'];
-$x = (isset($options['x'])) ? format_exts($options['x']) : $defaults['x'];
+# Set options as either defaults or passed values
+foreach ($defaults as $k => $v) {
+    $$k = $v;
+
+    if (isset($options[$k])) {
+        $$k = $options[$k];
+    }
+}
+
+# Re-format some options
+if (substr($d, -1) !== '/') {
+    $d .= '/';
+}
+if (substr($e, -1) !== '/') {
+    $e .= '/';
+}
+$i = format_exts($i);
+$x = format_exts($x);
 $v = isset($options['v']);
 
+# Write options to constants
 define('DIRECTORY', $d);
 define('ENV_HOME', $e);
 define('DATABASE', $f);
-define('EXT_INCLUDE', $i);
-define('EXT_EXCLUDE', $x);
+define('EXT_INCLUDE', serialize($i));
+define('EXT_EXCLUDE', serialize($x));
 define('VERBOSE', $v);
 
-unset($defaults, $options, $d, $e, $f, $i, $x, $v);
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-# Main program
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-
-umask(002);
-
-#
+# ------------------------------------------------------------------------------
 # Set up database environment
-#
+# ------------------------------------------------------------------------------
+
 vecho("Initializing database environment...\n");
 
-$env = new Db4Env();
-$env->open(ENV_HOME, DB_INIT_TXN | DB_INIT_LOG | DB_INIT_MPOOL | DB_INIT_LOCK | DB_CREATE | DB_INIT_TXN);
+# Create home directory if it does not exist
+if (!is_dir(ENV_HOME)) {
+    die('Home directory \'' . ENV_HOME . '\' does not exist.' . "\n");
+}
 
+# Initialize environment
+$env = new Db4Env();
+$env->open(ENV_HOME, DB_CREATE |
+                     DB_INIT_LOCK |
+                     DB_INIT_LOG |
+                     DB_INIT_MPOOL |
+                     DB_INIT_TXN);
+
+# Create XML manager and container
 $mgr = new XmlManager($env, 0);
 if ($mgr->existsContainer(DATABASE)) {
     $con = $mgr->openContainer(DATABASE);
-} else {
+}
+else {
     $con = $mgr->createContainer(DATABASE);
     $con->addIndex('', 'filemtime', 'node-metadata-equality-dateTime');
     $con->addIndex('', 'path', 'unique-node-element-equality-string');
@@ -95,249 +125,179 @@ if ($mgr->existsContainer(DATABASE)) {
     $con->addIndex('', 'album_artist', 'node-element-substring-string');
 }
 
-$qc = $mgr->createQueryContext(XmlQueryContext_LiveValues, XmlQueryContext_Eager);
+# Create query and update contexts
+$qc = $mgr->createQueryContext(XmlQueryContext_LiveValues,
+                               XmlQueryContext_Eager);
 $qc->setDefaultCollection(DATABASE);
 $uc = $mgr->createUpdateContext();
 
-#
-# Remove dead entires
-#
-vecho("Checking for dead entires...\n");
-$start = microtime(true);
+# ------------------------------------------------------------------------------
+# Remove dead entries
+# ------------------------------------------------------------------------------
 
+vecho("Removing dead entries...\n");
+
+# Create a transaction to use for deleting entries
 $txn = $mgr->createTransaction();
-$docs = $con->getAllDocuments($txn, DBXML_LAZY_DOCS);
-$count = 0;
 
-$docs->reset();
-while ($docs->hasNext()) {
-    $doc = $docs->next()->asDocument();
-    $path = $doc->getName();
+# Build and execute XQuery
+$xquery = 'for $i in collection()//song return data($i/path)';
+$result = $mgr->query($xquery, $qc);
 
+# Iterate over results
+while ($result->hasNext()) {
+    $path = $result->next()->asString();
+    $doc = $con->getDocument($path, DBXML_LAZY_DOCS);
+
+    # Ensure file exists and is readable
     if (!is_readable($path)) {
-        $con->deleteDocument($doc, $uc);
-        $count++;
+        $con->deleteDocument($txn, $doc, $uc);
 
-        vecho("Removed dead entry {$path}\n");
-    } else {
-        $time = $doc->getMetaData('', 'filemtime')->asString();
-        $time = strtotime($time);
-        if ($time < filemtime($path)) {
-            # File exists, is readable, and is newer than the database
-            $con->deleteDocument($doc, $uc);
-            $count++;
-
-            vecho("Removed out of date entry {$path}\n");
-        }
+        vecho("Removed dead entry '{$path}'.\n");
+        continue;
     }
 
-    unset($time, $path, $doc);
+    # Ensure file has a desired extension
+    $ext = pathinfo($path, PATHINFO_EXTENSION);
+    if ((EXT_INCLUDE !== null && stripos(EXT_INCLUDE, $ext) === false) ||
+        (EXT_EXCLUDE !== null && stripos(EXT_EXCLUDE, $ext) !== false)) {
+        $con->deleteDocument($txn, $doc, $uc);
+
+        vecho("Removed unwanted entry '{$path}'.\n");
+        continue;
+    }
+
+    # Ensure database entry is current
+    $time = strtotime($doc->getMetaData('', 'filemtime')->asString());
+    if ($time < filemtime($path)) {
+        $con->deleteDocument($txn, $doc, $uc);
+
+        vecho("Removed out of date entry '{$path}'.\n");
+        continue;
+    }
 }
 
-unset($docs);
 $txn->commit();
 
-$elapsed = round(microtime(true) - $start, 3);
-$s1 = ($count === 1) ? 'y' : 'ies';
-$s2 = ($elapsed == 1) ? '' : 's';
-vecho("Removed {$count} dead entr{$s1} in {$elapsed} second{$s2}.\n");
-
-unset($s2, $s1, $elapsed, $txn, $count, $start);
-
-#
+# ------------------------------------------------------------------------------
 # Scan for music files
-#
-vecho("Scanning for music files...\n");
-$start = microtime(true);
+# ------------------------------------------------------------------------------
+
+vecho("Scanning for files...\n");
 
 $files = scan(DIRECTORY);
+$files = filter($files, unserialize(EXT_INCLUDE), unserialize(EXT_EXCLUDE));
+
 if (!$files) {
     $files = array();
 }
 
-$elapsed = round(microtime(true) - $start, 3);
-$count = count($files);
-$s1 = ($count === 1) ? '' : 's';
-$s2 = ($elapsed == 1) ? '' : 's';
-vecho("Found {$count} music file{$s1} in {$elapsed} second{$s2}.\n");
+# ------------------------------------------------------------------------------
+# Parse all music files found
+# ------------------------------------------------------------------------------
 
-unset($s2, $s1, $count, $elapsed, $start);
+vecho("Parsing all files found...\n");
 
-#
-# Parse all media files found
-#
-vecho("Parsing all media files found...\n");
-$start = microtime(true);
-
+# Create a transaction to use for inserting entries
 $txn = $mgr->createTransaction();
-$count = 0;
-$i = 1;
-$count_files = count($files);
 
+# Iterate over files
 foreach ($files as $path) {
-    vecho(make_progress_bar($start, (double) $i++ / $count_files));
-
-    try {
-        $doc = $con->getDocument($path, DBXML_LAZY_DOCS);
-
-        # Skip documents that already exist
+    # Skip documents that already exist
+    if (document_exists($path, $con)) {
         continue;
-    } catch (XmlException $e) {
-        # Only catch 'document does not exist' exceptions
-        if ($e->getExceptionCode() !== 11) {
-            throw new XmlException($e);
-        }
     }
 
+    # Parse the ID3 tag on the file
     $tag = read_tag($path);
     if (!$tag) {
-        vecho("\nFailed to parse {$path}\n");
+        vecho("Failed to parse '{$path}'.\n");
+        continue;
     }
 
+    # Transform tag information into XML and put the document
     $song = array_to_xml($tag, 'song');
-
     $con->putDocument($txn, $path, $song, $uc);
-    $count++;
 
-    # Add metadata
+    # Add metadata to the document
     $doc = $con->getDocument($path, DBXML_LAZY_DOCS);
     $time = new XmlValue(XmlValue_DATE_TIME, date('c', filemtime($path)));
     $doc->setMetaData('', 'filemtime', $time);
     $con->updateDocument($doc);
 
-    unset($time, $doc, $song, $tag, $path);
+    vecho("Added new entry '{$path}'.\n");
 }
 
 $txn->commit();
 
-$elapsed = round(microtime(true) - $start, 3);
-$s1 = ($count === 1) ? 'y' : 'ies';
-$s2 = ($elapsed == 1) ? '' : 's';
-vecho("\n{$count} database entr{$s1} added in {$elapsed} second{$s2}.\n");
+# ------------------------------------------------------------------------------
+# Get every artist in the database
+# ------------------------------------------------------------------------------
 
-unset($count_files, $i, $s2, $s1, $elapsed, $txn, $count, $start, $files);
+vecho("Creating a list of artists...\n");
 
-#
-# Close the environment
-#
+# Initialize an array to hold artists
+$artists = array();
 
-unset($uc, $qc, $con, $mgr, $env);
-exit(0);
+# Build and execute XQuery
+$xquery = 'for $i in collection()/song order by $i/artist return $i/artist';
+$result = $mgr->query($xquery, $qc);
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# Iterate over artists
+while ($result->hasNext()) {
+    $artists[] = $result->next()->asString();
+}
+
+# Keep unique artists (i.e., only one of each)
+$artists = array_unique($artists);
+$artists = '<artists count="' . count($artists) . '">'
+         . implode('', $artists)
+         . '</artists>';
+
+# Add XML to database
+if (document_exists('artists', $con)) {
+    $con->deleteDocument('artists', $uc);
+}
+$con->putDocument('artists', $artists, $uc);
+
+# ------------------------------------------------------------------------------
+# Get every album in the database
+# ------------------------------------------------------------------------------
+
+vecho("Creating a list of albums...\n");
+
+# Initialize an array to hold albums
+$albums = array();
+
+# Build and execute XQuery
+$xquery = 'for $i in collection()/song order by $i/album return $i/album';
+$result = $mgr->query($xquery, $qc);
+
+# Iterate over albums
+while ($result->hasNext()) {
+    $albums[] = $result->next()->asString() . "\n";
+}
+
+# Keep unique albums (i.e., only one of each)
+$albums = array_unique($albums);
+$albums = '<albums count="' . count($albums) . '">'
+        . implode('', $albums)
+        . '</albums>';
+
+# Add XML to database
+if (document_exists('albums', $con)) {
+    $con->deleteDocument('albums', $uc);
+}
+$con->putDocument('albums', $albums, $uc);
+
+# ------------------------------------------------------------------------------
 # Functions
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# ------------------------------------------------------------------------------
 
-# Recursive scan a directory for readable files with proper extensions
-# $dir - directory to scan
-# Returns an array of filenames on success or false on failure
-function scan($dir, &$result = null) {
-    if (!is_dir($dir)) {
-        return false;
-    }
-
-    if (substr($dir, -1) !== '/') {
-        $dir .= '/';
-    }
-
-    $files = scandir($dir);
-
-    if (!$files) {
-        return false;
-    }
-
-    foreach ($files as $file) {
-        if ($file === '.' || $file === '..') {
-            continue;
-        }
-
-        $file = $dir . $file;
-
-        if (!is_readable($file)) {
-            continue;
-        }
-
-        if (is_dir($file)) {
-            scan($file, $result);
-            continue;
-        }
-
-        # Only include files with proper extensions
-        $ext = pathinfo($file, PATHINFO_EXTENSION);
-        if (EXT_INCLUDE !== null && stripos(EXT_INCLUDE, $ext) === false) {
-            continue;
-        }
-        if (stripos(EXT_EXCLUDE, $ext) !== false) {
-            continue;
-        }
-
-        $result[] = $file;
-    }
-
-    if (count($result) === 0) {
-        return false;
-    }
-
-    return $result;
-}
-
-# Reads ID3 info from a file
-# $file - path to file to read and parse
-# Returns an array of ID3 info or false if the tags can't be read
-function read_tag($file) {
-    static $parser;
-
-    if (!isset($parser)) {
-        $parser = new GetID3;
-    }
-
-    # Skip songs with invalid tags
-    try {
-        $song = $parser->Analyze($file);
-    } catch (getid3_exception $e) {
-        return false;
-    }
-
-    # Escape URLs but keep forward slashes
-    $url = str_replace('%2F', '/', rawurlencode($file));
-
-    if ($song['mime_type'] === 'audio/mpeg' || $song['mime_type'] === 'audio/mp4' || $song['mime_type'] === 'video/quicktime') {
-        $result = array(
-            'path' => $file,
-            'url' => $url,
-            'title' => @end($song['comments']['title']),
-            'artist' => @end($song['comments']['artist']),
-            'album' => @end($song['comments']['album']),
-            'album artist' => @end($song['comments']['text'])
-        );
-    } else {
-        return false;
-    }
-
-    # Trim and escape every value
-    foreach ($result as $k => &$v) {
-        if ($k === 'path' || $k === 'url') {
-            continue;
-        }
-
-        $v = trim($v);
-
-        if ($v === '') {
-            $v = 'Unknown';
-            continue;
-        }
-
-        $v = iconv($parser->encoding, 'UTF-8', $v);
-    }
-
-    return $result;
-}
-
-# Format an array into XML, making key values tags
-# ie 'key' => 'value' becomes <key>value</key>
-# $array - array to format into XML
-# $tag - parent tag to wrap XML in
-# returns XML as a string
+# Format an array into XML (i.e., 'key' => 'value' becomes <key>value</key>)
+# $array: array to format into XML
+# $tag: parent tag to wrap XML in
+# Returns XML as a string
 function array_to_xml($array, $tag) {
     # Replace whitespce in tag with underscores
     $tag = preg_replace('/\s/', '_', $tag);
@@ -361,60 +321,193 @@ function array_to_xml($array, $tag) {
     return $result;
 }
 
-# Formats a list of extensions
-# $extensions - comma-delimited list of extensions
-# Returns a space-delimited list of lowercase extensions
+# Determines if a document exists
+# $name: name of document to check for
+# $con: container to look in
+# Returns true or false
+function document_exists($name, &$con) {
+    $result = false;
+    
+    try {
+        $doc = $con->getDocument($name, DBXML_LAZY_DOCS);
+        $result = true;
+    }
+    catch (XmlException $e) {
+        if ($e->getExceptionCode() !== 11) {
+            throw new XmlException($e);
+        }
+    }
+    
+    return $result;
+}
+
+# Selects files from $files that have particular extensions
+# $files: array of files to check
+# $include: array of extensions to include
+# $exclude: array of extensions to exclude
+# Returns an array of files
+function filter($files, $include = array(), $exclude = array()) {
+    $result = array();
+
+    foreach ($files as $file) {
+        $ext = pathinfo($file, PATHINFO_EXTENSION);
+
+        # Skip files without extensions in $include
+        if (!empty($include) && !in_array($ext, $include)) {
+            continue;
+        }
+
+        # Skip files with extensions in $exclude
+        if (in_array($ext, $exclude)) {
+            continue;
+        }
+
+        $result[] = $file;
+    }
+
+    return $result;
+}
+
+# Formats a list of file extensions
+# $exts: comma-delimited list of extensions
+# Returns an array of lowercase extensions without periods
 function format_exts($exts) {
+    $result = array();
+
     $exts = explode(',', $exts);
 
-    foreach ($exts as &$ext) {
-        if ($ext[0] === '.')
+    foreach ($exts as $ext) {
+        if (empty($ext)) {
+            continue;
+        }
+
+        # Strip periods
+        if ($ext{0} === '.') {
             $ext = substr($ext, 1);
+        }
 
-        $ext = strtolower($ext);
+        $result[] = strtolower($ext);
     }
 
-    return implode(' ', $exts);
+    return $result;
 }
 
-# Makes a progress bar showing percent complete and time left
-# $start - epoch, as reported by microtime(true)
-# $percent - percentage of job complete, as a decimal (ex: 0.14)
-# Returns a string 80 characters wide
-function make_progress_bar($start, $percent) {
-    static $format = '  %3d%%  [ %-54s ]  ETA %5.5s';
+# Reads ID3 (v1 or v2) from a file
+# $file: path to file to read and parse
+# Returns an array of ID3 info or false on failure
+function read_tag($file) {
+    static $parser;
 
-    $progress_bar = str_repeat('=', 54 * $percent);
-    $progress_bar .= '>';
-
-    # Calculate time remaining
-    $elapsed = microtime(true) - $start;
-    $eta = $elapsed * (1 / $percent - 1);
-    $eta = floor($eta);
-    $minutes = floor($eta / 60);
-    $seconds = $eta % 60;
-    $eta = $minutes . ':' . sprintf('%02d', $seconds);
-
-    $percent = floor(100 * $percent);
-    $progress = sprintf($format, $percent, $progress_bar, $eta);
-
-    # Back the cursor up
-    $len = strlen($progress);
-    for ($j = 0; $j < $len; $j++) {
-        $progress .= chr(8);
+    if (!isset($parser)) {
+        $parser = new GetID3;
     }
 
-    return $progress;
+    # Skip songs with invalid tags
+    try {
+        $song = $parser->Analyze($file);
+    }
+    catch (getid3_exception $e) {
+        return false;
+    }
+
+    # Escape URLs but keep forward slashes
+    $url = str_replace('%2F', '/', rawurlencode($file));
+
+    $result = array
+    (
+        'path' => $file,
+        'url' => $url,
+        'title' => @end($song['comments']['title']),
+        'artist' => @end($song['comments']['artist']),
+        'album' => @end($song['comments']['album']),
+        'album artist' => @end($song['comments']['text'])
+    );
+
+    # Fill in album artist with artist if it doesn't exist
+    #if (trim($result['album artist']) === '') {
+        #$result['album artist'] = $result['artist'];
+    #}
+
+    # Trim and escape all values
+    foreach ($result as $k => &$v) {
+        if ($k === 'path' || $k === 'url') {
+            continue;
+        }
+
+        $v = trim($v);
+
+        if ($v === '') {
+            $v = 'Unknown';
+            continue;
+        }
+
+        $v = iconv($parser->encoding, 'UTF-8', $v);
+    }
+
+    return $result;
 }
 
-# Output only if verbose mode is on
-# $string - string to output
-# $stream - stream to output the string on
+# Recursively scans a directory for readable files
+# $dir: directory to search for files
+# $result: list of files found
+# $visited: directories that have been scanned already
+# Returns an array of files or false on failure
+function scan($dir, &$result = array(), &$visited = array()) {
+    # Fail if $dir is not readable or not a directory
+    if (!is_readable($dir) || !is_dir($dir)) {
+        return false;
+    }
+
+    # Append a trailing slash to the directory
+    if (substr($dir, -1) !== '/') {
+        $dir .= '/';
+    }
+
+    # Get a list of files in $dir
+    $files = scandir($dir);
+
+    foreach ($files as $file) {
+        # Skip the current and parent directories
+        if ($file === '.' || $file === '..') {
+            continue;
+        }
+
+        $file = $dir . $file;
+        $realpath = realpath($file);
+
+        # Skip files that have already been visited
+        if (isset($visited[$realpath]) && $visited[$realpath]) {
+            continue;
+        }
+        $visited[$realpath] = true;
+
+        # Skip unreadable files
+        if (!is_readable($file)) {
+            continue;
+        }
+
+        # Recursively call scan() if $file is a directory
+        if (is_dir($file)) {
+            scan($file, $result, $visited);
+            continue;
+        }
+
+        $result[] = $file;
+    }
+
+    return $result;
+}
+
+# Echo only if verbose mode is enabled
+# $string: text to output
+# $stream: stream to output to
 # Returns nothing
 function vecho($string, $stream = STDOUT) {
-    if (defined('VERBOSE') && VERBOSE) {
-        fwrite($stream, $string);
+    if (!defined('VERBOSE') || !VERBOSE) {
+        return;
     }
+    
+    fwrite($stream, $string);
 }
 
 ?>

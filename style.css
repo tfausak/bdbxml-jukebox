@@ -1,0 +1,168 @@
+/* 1.   Style reset */
+
+* {
+    margin: 0;
+    padding: 0;
+    -webkit-text-size-adjust: none;
+}
+
+/* 2.   Main layout */
+
+html {
+    background: #2e3436;
+    font: 1em/1.5em sans-serif;
+}
+
+body {
+    background: #eeeeec;
+    color: #2e3436;
+    margin: 0 auto;
+    max-width: 30em;
+    min-width: 20em;
+}
+
+    body#portrait { min-height: 416px; }
+    body#landscape { min-height: 268px; }
+
+#header,
+#query,
+#content,
+#footer {
+    position: relative;
+}
+
+#header {
+    background: #729fcf;
+    padding: 0.75em;
+}
+
+#query {
+    padding: 0.75em;
+}
+
+#content {
+    margin: 0 0.75em;
+}
+
+#footer {
+    padding: 0.75em;
+}
+
+/* 3.   Header */
+
+h1 {
+    font-size: 1.5em;
+    font-weight: bold;
+    line-height: 1em;
+}
+
+a#restart {
+    color: #eeeeec;
+    display: block;
+    line-height: 1.5em;
+    padding: 0 0.75em;
+    position: absolute;
+    right: 0.75em;
+    text-decoration: none;
+    top: 0.75em;
+}
+
+/* 4.   Query */
+
+fieldset#artist,
+fieldset#album,
+fieldset#search {
+    background: #d3d7cf;
+    border: 0;
+    margin-bottom: 0.75em;
+    padding: 0 0.75em 0.75em 0.75em;
+}
+
+    fieldset#artist legend,
+    fieldset#album legend,
+    fieldset#search legend {
+        background: inherit;
+        padding: 0 0.75em;
+    }
+
+    fieldset#artist select,
+    fieldset#album select,
+    fieldset#search input {
+        background: #eeeeec;
+        border: 1px solid;
+        display: block;
+        font: inherit;
+        height: 1.5em;
+        width: 100%;
+    }
+
+    fieldset#search input {
+        cursor: text;
+    }
+
+input#submit {
+    background: #8ae234;
+    border: 1px solid;
+    cursor: pointer;
+    display: block;
+    font: inherit;
+    height: 1.5em;
+    margin: 0 auto;
+    padding: 0 0.75em;
+}
+
+/* 5.   Content */
+
+ul#songs {
+    border-top: 1px solid #d3d7cf;
+    list-style: none;
+    margin: 0.75em -0.75em;
+}
+
+    ul#songs li {
+        border-bottom: 1px solid #d3d7cf;
+    }
+
+    ul#songs a {
+        color: inherit;
+        display: block;
+        text-decoration: none;
+    }
+
+        ul#songs a:hover {
+            background: #729fcf;
+            color: #eeeeec;
+        }
+
+span.line {
+    display: block;
+    overflow: hidden;
+    margin: 0 0.75em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+span.hidden {
+    display: none;
+}
+
+span.title {
+    font-weight: bold;
+}
+
+span.artist:after {
+    content: ' \00b7';
+}
+
+/* 6.   Footer */
+
+p#copyright {
+    color: #babdb6;
+    text-align: right;
+}
+
+    p#copyright a {
+        color: #babdb6;
+        font-weight: bold;
+        text-decoration: none;
+    }
